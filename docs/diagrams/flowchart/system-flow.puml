@@ -1,0 +1,49 @@
+@startuml
+skinparam defaultFontName DejaVu Sans
+skinparam defaultFontSize 12
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam activityBackgroundColor #F4F8FC
+skinparam activityBorderColor #3C6382
+skinparam activityDiamondBackgroundColor #FFF8E7
+skinparam activityDiamondBorderColor #C9A75A
+skinparam ArrowColor #334155
+title Вариант 16 · Общий цикл событийного моделирования
+
+|Движок|
+start
+:Инициализация:\nисточники, буфер, приборы,\nкалендарь, статистика;
+:Запланировать первые ARRIVAL\nдля всех источников;
+
+while (Календарь не пуст?) is (да)
+  :Извлечь ближайшее событие;\nnow = event.time;
+  if (Тип события?) then (ARRIVAL)
+    |Постановка|
+    :Сгенерировать заявку;\nЗапланировать следующий ARRIVAL;
+    :place() — поиск места по кольцу;
+    if (Есть свободное место?) then (да)
+      :Записать в слот;\nСдвинуть bufferPointer;
+    else (нет)
+      :evictOldest();\nЗаписать новую;\nСдвинуть pointer;
+      :Учесть отказ в статистике;
+    endif
+  else (COMPLETION)
+    |Обслуживание|
+    :finish(workerId);\nОсвободить прибор;\nУчесть завершение;
+  endif
+
+  |Выбор|
+  while (Есть свободный прибор\nИ есть заявки в буфере?) is (да)
+    :findFreeByRing();
+    :extractLIFO();
+    :start(worker, request);\nΔt ~ Exp(μ);
+    :Запланировать COMPLETION;\nСдвинуть workerPointer;
+  endwhile (нет)
+
+  |Движок|
+  :captureStep():\nкалендарь, буфер, приборы,\nжурнал, статистика (ОД1);
+endwhile (нет)
+
+:Сформировать StatisticsReport (ОР1);
+stop
+@enduml

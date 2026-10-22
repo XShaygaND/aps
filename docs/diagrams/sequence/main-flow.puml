@@ -1,0 +1,112 @@
+@startuml
+skinparam defaultFontName DejaVu Sans
+skinparam defaultFontSize 13
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam ArrowColor #334155
+skinparam LineColor #334155
+skinparam roundcorner 8
+skinparam NoteBackgroundColor #FFF8E7
+skinparam NoteBorderColor #C9A75A
+skinparam ParticipantBackgroundColor #EAF2FA
+skinparam ParticipantBorderColor #3C6382
+hide footbox
+title Вариант 16 · Оперативный анализ видеопотока\nПоступление, кольцевой буфер, переполнение, LIFO и обслуживание
+skinparam maxMessageSize 200
+autonumber
+
+participant "Движок\nSimulationEngine" as E
+participant "Камера-источник\nSource" as S
+control "Постановка\nPlacementDispatcher" as P
+queue "Кольцевой буфер\nBuffer" as B
+control "Выбор LIFO\nSelectionDispatcher" as D
+participant "GPU-узлы\nWorkerPool" as W
+participant "Календарь\nEventCalendar" as C
+participant "Статистика\nStatisticsCollector" as ST
+
+note over S
+ИБ: генерация независима от завершений.
+ИЗ2: интервалы Uniform[a,b].
+end note
+note over B
+Д1ОЗ1: поиск места по кольцу от bufferPointer.
+Д1ОО3: при заполнении выбить самую старую.
+end note
+note over D,W
+Д2Б2: LIFO — последняя поступившая.
+Д2П2: первый свободный прибор по кольцу.
+ПЗ1: время обслуживания Exp(μ).
+end note
+
+loop Пока календарь не пуст
+  E -> C: next()
+  C --> E: event(time, type, payload)
+  E -> E: now = event.time
+
+  alt ARRIVAL — кадр от камеры
+    E -> S: generate(now)
+    S --> E: request
+    E -> S: nextArrival(now)
+    S --> E: nextTime = now + Uniform[a,b]
+    opt nextTime ≤ T
+      E -> C: add(ARRIVAL(nextTime, sourceId))
+    end
+    E -> ST: recordGenerated(request, now)
+    E -> P: place(request, now)
+    P -> B: findFreeByRing()
+    B --> P: position или null
+    alt Место есть
+      P -> B: put(request, position)
+      P -> B: advancePointer()
+    else Буфер заполнен — выбивание старейшей
+      P -> B: evictOldest()
+      B --> P: victim
+      P -> P: victim.markRejected(now)
+      P -> B: put(request, freedPosition)
+      P -> B: advancePointer()
+    end
+    P --> E: victim или null
+    opt victim ≠ null
+      E -> ST: recordRejected(victim, now)
+      E -> D: onEvicted(victim.id)
+    end
+  else COMPLETION — завершение анализа кадра
+    E -> W: finish(workerId, now)
+    W --> E: request; прибор свободен
+    E -> ST: recordCompleted(request, workerId, now)
+  end
+
+  E -> D: dispatch(now)
+  D -> D: continueDispatch = true
+  loop Пока continueDispatch
+    D -> W: findFreeByRing()
+    W --> D: workerId или null
+    alt Нет свободного прибора
+      D -> D: continueDispatch = false
+    else Есть свободный
+      D -> B: extractLIFO()
+      B --> D: request или null
+      alt Буфер пуст
+        D -> D: continueDispatch = false
+      else Есть заявка
+        D -> ST: recordSelected(request, now)
+        D -> W: start(workerId, request, now)
+        W -> W: Δt ~ Exp(μ)\nworkerPointer = (workerId+1) mod M
+        W --> D: finishTime = now + Δt
+        D -> ST: recordStart(request, workerId, now)
+        D -> C: add(COMPLETION(finishTime, workerId, requestId))
+        D -> D: continueDispatch = есть ещё свободные и заявки
+      end
+    end
+  end
+  D --> E: Распределение закончено
+  E -> E: captureStep(event)
+end
+
+note over E,ST
+HappyFlow: свободный буфер + свободный прибор
+→ постановка и старт обслуживания при одном now.
+Перегрузка: полный буфер → выбивание старейшей;
+освобождение прибора → LIFO-выбор и ring-назначение.
+end note
+@enduml

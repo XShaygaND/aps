@@ -1,0 +1,152 @@
+@startuml
+skinparam defaultFontName DejaVu Sans
+skinparam defaultFontSize 13
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam ArrowColor #334155
+skinparam LineColor #334155
+skinparam roundcorner 8
+skinparam classBackgroundColor #F4F8FC
+skinparam classBorderColor #3C6382
+!pragma layout smetana
+title Вариант 16 · Диаграмма классов имитационной модели
+skinparam classAttributeIconSize 0
+skinparam nodesep 30
+skinparam ranksep 50
+top to bottom direction
+
+class SimulationEngine {
+  - now: double
+  - generationHorizon: double
+  - sources: Source[]
+  - buffer: Buffer
+  - pool: WorkerPool
+  - calendar: EventCalendar
+  - placement: PlacementDispatcher
+  - selection: SelectionDispatcher
+  - statistics: StatisticsCollector
+  + initialize(): void
+  + step(): StepSnapshot
+  + run(): StatisticsReport
+  - handleArrival(event: ScheduledEvent): void
+  - handleCompletion(event: ScheduledEvent): void
+  - captureStep(event: ScheduledEvent): StepSnapshot
+}
+
+class Source {
+  - id: int
+  - a: double
+  - b: double
+  - sequenceNumber: long
+  - rng: RandomGenerator
+  + generate(time: double): Request
+  + nextArrival(time: double): double
+  + snapshot(): SourceSnapshot
+}
+
+class Request {
+  - id: RequestId
+  - sourceId: int
+  - sequenceNumber: long
+  - createdAt: double
+  - serviceStartedAt: double?
+  - completedAt: double?
+  - rejectedAt: double?
+  - status: RequestStatus
+  + markBuffered(): void
+  + markProcessing(time: double): void
+  + markCompleted(time: double): void
+  + markRejected(time: double): void
+  + snapshot(): RequestSnapshot
+}
+
+class PlacementDispatcher {
+  - buffer: Buffer
+  + place(request: Request, time: double): Request?
+}
+
+class Buffer {
+  - capacity: int
+  - slots: Request?[]
+  - bufferPointer: int
+  + findFreeByRing(): int?
+  + evictOldest(): Request
+  + put(request: Request, position: int): void
+  + extractLIFO(): Request?
+  + advancePointer(): void
+  + snapshot(): BufferSnapshot
+}
+
+class SelectionDispatcher {
+  - buffer: Buffer
+  - pool: WorkerPool
+  - calendar: EventCalendar
+  - statistics: StatisticsCollector
+  + dispatch(time: double): void
+}
+
+class WorkerPool {
+  - workers: Worker[]
+  - workerPointer: int
+  + findFreeByRing(): int?
+  + start(workerId: int, request: Request, time: double): double
+  + finish(workerId: int, time: double): Request
+  + snapshot(): WorkerPoolSnapshot
+}
+
+class Worker {
+  - id: int
+  - currentRequest: Request?
+  - finishAt: double?
+  - mu: double
+  - rng: RandomGenerator
+  + isFree(): boolean
+  + start(request: Request, time: double): double
+  + finish(time: double): Request
+  + snapshot(): WorkerSnapshot
+}
+
+class EventCalendar {
+  - events: PriorityQueue<ScheduledEvent>
+  + add(event: ScheduledEvent): void
+  + next(): ScheduledEvent
+  + isEmpty(): boolean
+  + snapshot(): ScheduledEvent[]
+}
+
+class ScheduledEvent {
+  - time: double
+  - type: EventType
+  - sourceId: int?
+  - workerId: int?
+  - requestId: RequestId?
+  {static} + arrival(time: double, sourceId: int): ScheduledEvent
+  {static} + completion(time: double, workerId: int, requestId: RequestId): ScheduledEvent
+}
+
+class StatisticsCollector {
+  + recordGenerated(r: Request, t: double): void
+  + recordRejected(r: Request, t: double): void
+  + recordSelected(r: Request, t: double): void
+  + recordStart(r: Request, w: int, t: double): void
+  + recordCompleted(r: Request, w: int, t: double): void
+  + report(): StatisticsReport
+}
+
+SimulationEngine --> Source
+SimulationEngine --> Buffer
+SimulationEngine --> WorkerPool
+SimulationEngine --> EventCalendar
+SimulationEngine --> PlacementDispatcher
+SimulationEngine --> SelectionDispatcher
+SimulationEngine --> StatisticsCollector
+PlacementDispatcher --> Buffer
+SelectionDispatcher --> Buffer
+SelectionDispatcher --> WorkerPool
+SelectionDispatcher --> EventCalendar
+SelectionDispatcher --> StatisticsCollector
+WorkerPool --> Worker
+Source --> Request : creates
+Buffer --> Request : stores
+Worker --> Request : serves
+@enduml

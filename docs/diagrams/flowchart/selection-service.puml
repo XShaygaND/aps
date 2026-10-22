@@ -1,0 +1,35 @@
+@startuml
+skinparam defaultFontName DejaVu Sans
+skinparam defaultFontSize 12
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam activityBackgroundColor #F4F8FC
+skinparam activityBorderColor #3C6382
+skinparam activityDiamondBackgroundColor #FFF8E7
+skinparam activityDiamondBorderColor #C9A75A
+title Вариант 16 · Подпроцесс Б: выбор LIFO и обслуживание (Д2Б2 + Д2П2)
+
+start
+:dispatch(now);
+
+while (continue?) is (да)
+  :workerId = findFreeByRing()\n(от workerPointer);
+  if (workerId == null?) then (да — все заняты)
+    :continue = false;
+  else (есть свободный)
+    :request = extractLIFO()\n(макс. createdAt, затем макс. ID);
+    if (request == null?) then (да — буфер пуст)
+      :continue = false;
+    else (есть заявка)
+      :recordSelected(request);
+      :finishTime = Worker.start(request, now);\nΔt ~ Exp(μ);
+      :workerPointer = (workerId + 1) mod M;
+      :Добавить COMPLETION(finishTime, ...);
+      :recordStart(request, workerId);
+      :continue = (есть ещё свободные\nИ есть ещё заявки в буфере);
+    endif
+  endif
+endwhile (нет)
+
+stop
+@enduml

@@ -1,0 +1,47 @@
+@startuml
+skinparam defaultFontName DejaVu Sans
+skinparam defaultFontSize 13
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam ArrowColor #334155
+skinparam roundcorner 8
+skinparam NoteBackgroundColor #FFF8E7
+skinparam NoteBorderColor #C9A75A
+skinparam ParticipantBackgroundColor #EAF2FA
+skinparam ParticipantBorderColor #3C6382
+hide footbox
+title Вариант 16 · Переполнение буфера\nД1ОЗ1 + Д1ОО3: кольцо и выбивание старейшей
+skinparam maxMessageSize 180
+autonumber
+
+participant "Движок" as E
+participant "Камера" as S
+control "Постановка" as P
+queue "Кольцевой буфер\n(заполнен)" as B
+participant "Статистика" as ST
+
+E -> S: generate(now)
+S --> E: request (новый кадр)
+E -> P: place(request, now)
+P -> B: findFreeByRing()
+B --> P: null (мест нет)
+
+P -> B: evictOldest()
+note right of B
+Самая старая по createdAt
+(при равенстве — меньший ID)
+end note
+B --> P: victim
+P -> P: victim.markRejected(now)
+P -> B: put(request, freedSlot)
+P -> B: advancePointer()
+P --> E: victim
+
+E -> ST: recordRejected(victim, now)
+
+note over E,B
+Новый кадр занимает место устаревшего.
+Обслуживаемые заявки не затрагиваются.
+Отказ учитывается источнику victim.
+end note
+@enduml

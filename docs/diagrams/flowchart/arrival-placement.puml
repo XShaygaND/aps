@@ -1,0 +1,38 @@
+@startuml
+skinparam defaultFontName DejaVu Sans
+skinparam defaultFontSize 12
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam activityBackgroundColor #F4F8FC
+skinparam activityBorderColor #3C6382
+skinparam activityDiamondBackgroundColor #FFF8E7
+skinparam activityDiamondBorderColor #C9A75A
+title Вариант 16 · Подпроцесс А: генерация и постановка (Д1ОЗ1 + Д1ОО3)
+
+start
+:ARRIVAL от источника i;
+:Создать Request(id, sourceId, now);
+:nextTime = now + Uniform[aᵢ, bᵢ];
+if (nextTime ≤ T?) then (да)
+  :Добавить ARRIVAL(nextTime, i) в календарь;
+else (нет)
+endif
+:recordGenerated();
+
+:pos = findFreeByRing()\n(начиная с bufferPointer);
+if (pos найден?) then (да)
+  :slots[pos] = request;
+  :bufferPointer = (pos + 1) mod capacity;
+  :request.markBuffered();
+else (нет — буфер полон)
+  :victim = evictOldest()\n(мин. createdAt, затем мин. ID);
+  :victim.markRejected(now);
+  :recordRejected(victim);
+  :slots[freed] = request;
+  :bufferPointer = (freed + 1) mod capacity;
+  :request.markBuffered();
+endif
+
+:Вызвать dispatch() для возможного\nнемедленного назначения;
+stop
+@enduml

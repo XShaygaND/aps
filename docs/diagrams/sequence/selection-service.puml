@@ -1,0 +1,48 @@
+@startuml
+skinparam defaultFontName DejaVu Sans
+skinparam defaultFontSize 13
+skinparam backgroundColor White
+skinparam shadowing false
+skinparam ArrowColor #334155
+skinparam roundcorner 8
+skinparam NoteBackgroundColor #FFF8E7
+skinparam NoteBorderColor #C9A75A
+skinparam ParticipantBackgroundColor #EAF2FA
+skinparam ParticipantBorderColor #3C6382
+hide footbox
+title Вариант 16 · Выбор и обслуживание\nД2Б2 LIFO + Д2П2 ring
+skinparam maxMessageSize 180
+autonumber
+
+participant "Движок" as E
+control "Выбор LIFO" as D
+queue "Буфер" as B
+participant "GPU-пул" as W
+participant "Календарь" as C
+participant "Статистика" as ST
+
+E -> D: dispatch(now)  ' после COMPLETION или ARRIVAL
+
+D -> W: findFreeByRing()
+W --> D: workerId (или null)
+
+alt Есть свободный узел
+  D -> B: extractLIFO()
+  note right of B
+  Последняя по createdAt
+  (самая свежая)
+  end note
+  B --> D: request
+  D -> ST: recordSelected(request, now)
+  D -> W: start(workerId, request, now)
+  W -> W: Δt ~ Exp(μ)\nworkerPointer++
+  W --> D: finishTime
+  D -> ST: recordStart(...)
+  D -> C: add(COMPLETION(finishTime, workerId, id))
+else Нет свободных
+  note over D,W
+  Заявки остаются в буфере.
+  workerPointer не меняется.
+  end note
+end
+@enduml
